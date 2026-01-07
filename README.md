@@ -71,7 +71,3 @@ python monECC.py decrypt bob.priv -i message.enc -o message.txt
 - La partie ECC (addition, double-and-add, inverse modulaire) est codée à la main dans `ecc.py`.
 - Pour coller au CLI du TP, le chiffrement utilise un scalaire **éphémère** `r` et inclut `R = rP` dans le cryptogramme.
   Le destinataire calcule ensuite le secret partagé avec sa clé privée (`S = kR`).
-
-## Auteurs
-
-- FRIOUICHEN Mohammed
