@@ -1,4 +1,4 @@
-# Auteurs : M. FRIOUICHEN Mohammed
+# Auteurs : FRIOUICHEN Mohammed - M2 AL
 
 # monECC (TP)
 
