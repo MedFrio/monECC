@@ -9,14 +9,13 @@ ECC est codé à la main (voir ecc.py). SHA256 + AES-CBC via la lib "cryptograph
 """
 
 from __future__ import annotations
-from ecc import Curve, Point, scalar_mult, is_on_curve, point_order
-
 
 import argparse
 import sys
 from pathlib import Path
+import secrets
 
-from ecc import Curve, Point, scalar_mult, is_on_curve
+from ecc import Curve, Point, scalar_mult, is_on_curve, point_order
 from keyfile import (
     read_private_key,
     read_public_key,
@@ -41,30 +40,40 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # keygen
     p_keygen = sub.add_parser("keygen", help="Génère une paire de clés")
-    p_keygen.add_argument("-f", "--filename", default="monECC",
-                          help="Nom de base des fichiers (défaut: monECC -> monECC.pub & monECC.priv)")
-    p_keygen.add_argument("-s", "--size", type=int, default=1000,
-                          help="Plage d'aléa de la clé privée (défaut: 1000)")
+    p_keygen.add_argument(
+        "-f",
+        "--filename",
+        default="monECC",
+        help="Nom de base des fichiers (défaut: monECC -> monECC.pub & monECC.priv)",
+    )
+    p_keygen.add_argument(
+        "-s",
+        "--size",
+        type=int,
+        default=1000,
+        help="Plage d'aléa de la clé privée (défaut: 1000)",
+    )
 
     # crypt
     p_crypt = sub.add_parser("crypt", help="Chiffre un texte pour une clé publique")
     p_crypt.add_argument("keyfile", help="Fichier .pub (clé publique monECC)")
     p_crypt.add_argument("text", nargs="?", help="Texte en clair (mettez des guillemets si espaces)")
-    p_crypt.add_argument("-s", "--size", type=int, default=1000,
-                         help="Plage d'aléa (clé éphémère) (défaut: 1000)")
-    p_crypt.add_argument("-i", "--input", dest="input_file",
-                         help="Lire le texte en clair depuis un fichier")
-    p_crypt.add_argument("-o", "--output", dest="output_file",
-                         help="Écrire le cryptogramme dans un fichier (sinon stdout)")
+    p_crypt.add_argument(
+        "-s",
+        "--size",
+        type=int,
+        default=1000,
+        help="Plage d'aléa (scalaire éphémère) (défaut: 1000)",
+    )
+    p_crypt.add_argument("-i", "--input", dest="input_file", help="Lire le texte en clair depuis un fichier")
+    p_crypt.add_argument("-o", "--output", dest="output_file", help="Écrire le cryptogramme dans un fichier (sinon stdout)")
 
     # decrypt
     p_decrypt = sub.add_parser("decrypt", help="Déchiffre un texte avec une clé privée")
     p_decrypt.add_argument("keyfile", help="Fichier .priv (clé privée monECC)")
     p_decrypt.add_argument("text", nargs="?", help="Cryptogramme (mettez des guillemets si espaces)")
-    p_decrypt.add_argument("-i", "--input", dest="input_file",
-                           help="Lire le cryptogramme depuis un fichier")
-    p_decrypt.add_argument("-o", "--output", dest="output_file",
-                           help="Écrire le texte en clair dans un fichier (sinon stdout)")
+    p_decrypt.add_argument("-i", "--input", dest="input_file", help="Lire le cryptogramme depuis un fichier")
+    p_decrypt.add_argument("-o", "--output", dest="output_file", help="Écrire le texte en clair dans un fichier (sinon stdout)")
 
     return parser
 
@@ -100,6 +109,28 @@ def _write_output(data: str, output_file: str | None) -> None:
         print(data)
 
 
+def _effective_max_scalar(size: int, n: int) -> int:
+    """
+    Sur un générateur d'ordre n, les scalaires utiles sont 1..n-1.
+    On borne aussi par -s (size) pour coller à la consigne du TP.
+    """
+    if size < 2:
+        raise ValueError("La taille (-s) doit être >= 2.")
+
+    if n <= 1:
+        raise ValueError("Ordre du point générateur invalide (n <= 1).")
+
+    # borne réelle : 1..n-1
+    real_max = n - 1
+    eff = min(size, real_max)
+
+    # si eff==0 => n-1==0 donc n==1, déjà géré
+    if eff < 1:
+        raise ValueError("Impossible de choisir un scalaire valide (n trop petit).")
+
+    return eff
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
 
@@ -112,36 +143,30 @@ def main(argv: list[str] | None = None) -> int:
 
     curve = Curve(p=101, a=35, b=3)
     P = Point(2, 9)
-    n = point_order(curve, P)
 
+    # ordre du générateur
+    n = point_order(curve, P)
 
     if args.command in (None, "help"):
         _print_manual()
         return 0
 
     if args.command == "keygen":
-        if args.size < 2:
-            raise ValueError("La taille (-s) doit être >= 2.")
+        max_k = _effective_max_scalar(args.size, n)
+
         priv_path = Path(f"{args.filename}.priv")
         pub_path = Path(f"{args.filename}.pub")
 
-        # Tire k jusqu'à obtenir un point public valide (évite le point à l'infini).
-        from ecies import random_scalar
-
-        import secrets
-
+        # Tire k uniformément dans [1..max_k]
+        # (si n est petit, c'est mathématiquement normal d'avoir peu de clés possibles)
         while True:
-            k = secrets.randbelow(n - 1) + 1  # 1..n-1
+            k = secrets.randbelow(max_k) + 1
             Q = scalar_mult(curve, k, P)
             if Q.is_infinity():
                 continue
             if not is_on_curve(curve, Q):
                 continue
-            # optionnel mais recommandé : évite y=0 (points "spéciaux")
-            if Q.y == 0:
-                continue
             break
-
 
         write_private_key(priv_path, k)
         write_public_key(pub_path, Q)
@@ -153,7 +178,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "crypt":
         plaintext = _read_text_arg(args.text, args.input_file)
         Qb = read_public_key(Path(args.keyfile))
-        cryptogram = encrypt_message(curve, P, Qb, plaintext, max_scalar=n - 1)
+
+        max_r = _effective_max_scalar(args.size, n)
+        cryptogram = encrypt_message(curve, P, Qb, plaintext, max_scalar=max_r)
+
         _write_output(cryptogram, args.output_file)
         return 0
 

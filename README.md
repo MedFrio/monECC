@@ -1,3 +1,5 @@
+# Auteurs : M. FRIOUICHEN Mohammed
+
 # monECC (TP)
 
 Application en ligne de commande qui génère des clés, chiffre et déchiffre des messages avec ECC (courbe imposée) + SHA256 + AES-CBC.

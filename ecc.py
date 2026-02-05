@@ -8,9 +8,7 @@ ECC minimaliste pour le TP.
 from __future__ import annotations
 
 from dataclasses import dataclass
-
 from math import isqrt
-
 
 
 @dataclass(frozen=True)
@@ -78,12 +76,14 @@ def point_add(curve: Curve, P: Point, Q: Point) -> Point:
     if P.x == Q.x and (P.y + Q.y) % p == 0:
         return INF
 
+    # Doublage (cas spécial y == 0 => tangente verticale => 2P = O)
+    if P == Q and (P.y % p) == 0:
+        return INF
+
     if P == Q:
-        # Doublage
         num = (3 * P.x * P.x + curve.a) % p
         den = (2 * P.y) % p
     else:
-        # Addition
         num = (Q.y - P.y) % p
         den = (Q.x - P.x) % p
 
@@ -100,7 +100,6 @@ def scalar_mult(curve: Curve, k: int, P: Point) -> Point:
     """
     if k == 0 or P.is_infinity():
         return INF
-
 
     k = int(k)
     if k < 0:

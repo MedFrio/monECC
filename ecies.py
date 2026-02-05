@@ -35,7 +35,6 @@ def _derive_key_iv(S: Point) -> tuple[bytes, bytes]:
     if S.x is None or S.y is None:
         raise ValueError("Secret partagé invalide (point à l'infini).")
 
-    # Petite courbe => coords petites. On sérialise proprement en bytes.
     msg = f"{S.x};{S.y}".encode("utf-8")
     digest = hashlib.sha256(msg).digest()  # 32 bytes
     iv = digest[:16]
@@ -51,13 +50,20 @@ def _b64d(s: str) -> bytes:
     return base64.b64decode(s.encode("ascii"))
 
 
-def encrypt_message(curve: Curve, P: Point, Qb: Point, plaintext: str, max_scalar: int = 1000) -> str:
+def encrypt_message(
+    curve: Curve,
+    P: Point,
+    Qb: Point,
+    plaintext: str,
+    max_scalar: int = 1000,
+) -> str:
     if not is_on_curve(curve, P) or not is_on_curve(curve, Qb):
         raise ValueError("Point hors courbe.")
 
     # Scalaire éphémère
     while True:
         r = random_scalar(max_scalar)
+
         R = scalar_mult(curve, r, P)
         if R.is_infinity():
             continue
